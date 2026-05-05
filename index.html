@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบแจ้งการบ้าน - Edit Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; }
+        .urgent-red {
+            border-left-color: #ef4444 !important;
+            background-color: #fef2f2 !important;
+            animation: pulse-red 2s infinite;
+        }
+        .past-due-purple {
+            border-left-color: #a855f7 !important;
+            background-color: #f3e8ff !important;
+            opacity: 0.8;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body class="p-4 pb-24">
+
+    <div class="max-w-xl mx-auto">
+        <header class="flex justify-between items-center mb-8 bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">📚 การบ้าน ม.5/2569</h1>
+                <p class="text-xs font-medium">
+                    <span class="text-red-500">🔴 ด่วน</span> | 
+                    <span class="text-purple-600">🟣 เลยกำหนด</span>
+                </p>
+            </div>
+            <button onclick="toggleAdmin()" class="bg-indigo-600 text-white px-5 py-2.5 rounded-2xl text-sm font-semibold shadow-lg active:scale-95">
+                + เพิ่มงาน
+            </button>
+        </header>
+
+        <!-- ฟอร์มแอดมิน (ใช้ทั้งเพิ่มและแก้ไข) -->
+        <section id="admin-panel" class="bg-white p-6 rounded-3xl shadow-xl mb-8 hidden border-2 border-indigo-500">
+            <h2 id="form-title" class="text-lg font-bold mb-5">✍️ เพิ่มงานใหม่</h2>
+            <input type="hidden" id="edit-id"> <!-- เก็บ ID งานที่จะแก้ไข -->
+            <div class="space-y-4">
+                <input type="text" id="subject" placeholder="วิชา..." class="w-full border p-3.5 rounded-2xl bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-400">
+                <input type="text" id="task" placeholder="รายละเอียดงาน..." class="w-full border p-3.5 rounded-2xl bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-400">
+                <input type="date" id="deadline" class="w-full border p-3.5 rounded-2xl bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-400">
+                <div class="flex gap-2">
+                    <button id="save-btn" onclick="saveTask()" class="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg">บันทึกงาน 🚀</button>
+                    <button id="cancel-btn" onclick="resetForm()" class="hidden bg-gray-200 text-gray-600 px-6 rounded-2xl font-bold">ยกเลิก</button>
+                </div>
+            </div>
+        </section>
+
+        <main id="task-container" class="space-y-4">
+            <p class="text-center text-slate-400 py-10">กำลังโหลด...</p>
+        </main>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGfy1QByMVEwnGpwgVATFGE72K_S0y0H0",
+            authDomain: "homework-59915.firebaseapp.com",
+            databaseURL: "https://homework-59915-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "homework-59915",
+            storageBucket: "homework-59915.firebasestorage.app",
+            messagingSenderId: "463766358522",
+            appId: "1:463766358522:web:e4e67deedca8c918a287c8"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const ref = db.ref('homeworks');
+
+        function toggleAdmin() { 
+            const panel = document.getElementById('admin-panel');
+            panel.classList.toggle('hidden');
+            if (panel.classList.contains('hidden')) resetForm();
+        }
+
+        // ฟังก์ชันล้างฟอร์ม
+        function resetForm() {
+            document.getElementById('edit-id').value = '';
+            document.getElementById('subject').value = '';
+            document.getElementById('task').value = '';
+            document.getElementById('deadline').value = '';
+            document.getElementById('form-title').innerText = '✍️ เพิ่มงานใหม่';
+            document.getElementById('save-btn').innerText = 'บันทึกงาน 🚀';
+            document.getElementById('cancel-btn').classList.add('hidden');
+        }
+
+        // ฟังก์ชันแก้ไขงาน
+        function editTask(id, subject, task, deadline) {
+            document.getElementById('admin-panel').classList.remove('hidden');
+            document.getElementById('edit-id').value = id;
+            document.getElementById('subject').value = subject;
+            document.getElementById('task').value = task;
+            document.getElementById('deadline').value = deadline;
+            
+            document.getElementById('form-title').innerText = '✏️ แก้ไขงาน';
+            document.getElementById('save-btn').innerText = 'อัปเดตงาน ✨';
+            document.getElementById('cancel-btn').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function saveTask() {
+            const id = document.getElementById('edit-id').value;
+            const s = document.getElementById('subject').value, 
+                  t = document.getElementById('task').value, 
+                  d = document.getElementById('deadline').value;
+
+            if (s && t && d) {
+                const taskData = { subject: s, task: t, deadline: d };
+                
+                if (id) {
+                    // ถ้ามี ID คือการ Update
+                    ref.child(id).update(taskData).then(() => {
+                        resetForm();
+                        toggleAdmin();
+                    });
+                } else {
+                    // ถ้าไม่มี ID คือการ Add New
+                    ref.push(taskData).then(() => {
+                        resetForm();
+                        toggleAdmin();
+                    });
+                }
+            } else { alert("กรอกให้ครบสิ!"); }
+        }
+
+        ref.on('value', (snapshot) => {
+            const data = snapshot.val();
+            const container = document.getElementById('task-container');
+            container.innerHTML = '';
+
+            if (!data) {
+                container.innerHTML = '<div class="bg-white p-10 rounded-3xl text-center text-slate-400">ไม่มีงานจ้า โชคดีนะ! 🍀</div>';
+                return;
+            }
+
+            Object.entries(data).reverse().forEach(([key, val]) => {
+                const deadlineDate = new Date(val.deadline);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const diffDays = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+
+                let cardClass = "task-card bg-white p-5 rounded-3xl shadow-sm border-l-[10px] border-indigo-500 flex items-center";
+                let statusColor = "text-indigo-600 bg-indigo-50";
+                let dayAlert = "";
+
+                if (diffDays < 0) {
+                    cardClass += " past-due-purple";
+                    statusColor = "text-purple-600 bg-purple-100";
+                    dayAlert = ` (เลยมาแล้ว ${Math.abs(diffDays)} วัน)`;
+                } else if (diffDays <= 2) {
+                    cardClass += " urgent-red";
+                    statusColor = "text-red-600 bg-red-100";
+                    dayAlert = ` (เหลือ ${diffDays} วัน!)`;
+                }
+
+                const card = document.createElement('div');
+                card.className = cardClass;
+                card.innerHTML = `
+                    <div class="flex-1">
+                        <span class="text-[10px] font-bold ${statusColor} px-2.5 py-1 rounded-full uppercase">${val.subject}</span>
+                        <h3 class="text-lg font-semibold text-slate-800 mt-2">${val.task}</h3>
+                        <p class="text-xs mt-2 font-medium ${diffDays < 0 ? 'text-purple-600' : (diffDays <= 2 ? 'text-red-500' : 'text-slate-400')}">
+                            📅 ส่ง: ${deadlineDate.toLocaleDateString('th-TH')} ${dayAlert}
+                        </p>
+                    </div>
+                    <button onclick="editTask('${key}', '${val.subject}', '${val.task}', '${val.deadline}')" 
+                            class="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-500 hover:text-white transition-all">
+                        ✏️
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        });
+    </script>
+</body>
+</html>
